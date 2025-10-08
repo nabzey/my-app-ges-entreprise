@@ -1,0 +1,226 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  // output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Entreprises {
+  id        Int       @id @default(autoincrement())
+  nom       String
+  logo      String?   @db.Text // Allow longer strings for base64 images
+  adresse   String
+  paiement  String    @default("XOF") //espece de paiement
+  dbName    String?   @unique // nom de la DB tenant
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  users      Users[]
+  employees  Employee[]
+  payRuns    PayRun[]
+  pointages  Pointage[]
+  attendances Attendance[]
+}
+
+model Users {
+  id           Int       @id @default(autoincrement())
+  email        String    @unique
+  password     String
+  role         Role
+  nom          String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  entreprise   Entreprises? @relation(fields: [entrepriseId], references: [id])
+  entrepriseId Int?
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  CAISSIER
+  EMPLOYEE
+  VIGIL
+}
+
+enum TypeContrat {
+  JOURNALIER
+  FIXE
+  HONORAIRE
+}
+
+enum ModePaiement {
+  ESPECES
+  VIREMENT_BANCAIRE
+  ORANGE_MONEY
+  WAVE
+}
+
+enum StatusPayRun {
+  BROUILLON
+  APPROUVE
+  CLOTURE
+}
+
+enum StatusPayslip {
+  PAYE
+  PARTIEL
+  EN_ATTENTE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  RETARD
+  ABSENT
+}
+
+model Employee {
+   id                  Int           @id @default(autoincrement())
+   nom                 String
+   email               String        @unique
+   password            String?
+   poste               String
+   typeContrat         TypeContrat
+   tauxSalaire         Decimal
+   joursTravailles     Int?          // for journalier
+   coordonneesBancaires String?
+   qrCode              String?       @unique // QR code unique pour pointage
+   confirmationCode    String?       // Code de confirmation pour recevoir le QR
+   actif               Boolean       @default(true)
+   createdAt           DateTime      @default(now())
+   updatedAt           DateTime      @updatedAt
+
+   entrepriseId        Int
+   entreprise          Entreprises   @relation(fields: [entrepriseId], references: [id])
+
+   payslips            Payslip[]
+   pointages           Pointage[]
+   attendances         Attendance[]
+   congeRequest        CongeRequest[]
+}
+
+model PayRun {
+  id        Int           @id @default(autoincrement())
+  periode   DateTime
+  type      String        // MENSUEL, HEBDOMADAIRE, JOURNALIER
+  status    StatusPayRun  @default(BROUILLON)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  entrepriseId        Int
+  entreprise          Entreprises   @relation(fields: [entrepriseId], references: [id])
+
+  payslips  Payslip[]
+}
+
+model Payslip {
+  id          Int             @id @default(autoincrement())
+  employeeId  Int
+  payRunId    Int
+  brut        Decimal
+  deductions  Decimal         @default(0)
+  net         Decimal
+  status      StatusPayslip   @default(EN_ATTENTE)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  employee    Employee        @relation(fields: [employeeId], references: [id])
+  payRun      PayRun          @relation(fields: [payRunId], references: [id])
+  payments    Payment[]
+}
+
+model Payment {
+  id          Int           @id @default(autoincrement())
+  payslipId   Int
+  montant     Decimal
+  mode        ModePaiement
+  date        DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  payslip     Payslip       @relation(fields: [payslipId], references: [id])
+}
+
+enum TypePointage {
+  ARRIVEE
+  DEPART
+  PAUSE_DEBUT
+  PAUSE_FIN
+}
+
+model Pointage {
+  id          Int           @id @default(autoincrement())
+  employeeId  Int
+  date        DateTime      @default(now())
+  type        TypePointage
+  heure       DateTime
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  entrepriseId        Int
+  entreprise          Entreprises   @relation(fields: [entrepriseId], references: [id])
+
+  employee    Employee      @relation(fields: [employeeId], references: [id])
+}
+
+model Attendance {
+  id          Int               @id @default(autoincrement())
+  employeeId  Int
+  date        DateTime          // Date of attendance (YYYY-MM-DD)
+  status      AttendanceStatus
+  arrivalTime DateTime?         // Time of arrival
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  entrepriseId        Int
+  entreprise          Entreprises   @relation(fields: [entrepriseId], references: [id])
+
+  employee    Employee          @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, date])
+}
+
+model CongeRequest {
+  id              Int       @id @default(autoincrement())
+  employeeId      Int
+  employee        Employee @relation(fields: [employeeId], references: [id])
+  typeConge       TypeConge
+  dateDebut       DateTime
+  dateFin         DateTime
+  motif           String?
+  status          StatusConge @default(EN_ATTENTE)
+  commentaireRH   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([employeeId])
+}
+
+enum TypeConge {
+  ANNUEL
+  MALADIE
+  SANS_SOLDE
+  MATERNITE
+  PATERNITE
+  EXCEPTIONNEL
+}
+
+enum StatusConge {
+  EN_ATTENTE
+  APPROUVE
+  REJETE
+  ANNULE
+}
+
+
+
+
